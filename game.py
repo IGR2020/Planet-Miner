@@ -18,6 +18,10 @@ class Game:
         pg.display.set_caption(name)
         self.deltaTime = 0
 
+        self.onInit()
+
+    def onInit(self): ...
+
     def tick(self) -> None: ...
 
     def display(self) -> None: ...

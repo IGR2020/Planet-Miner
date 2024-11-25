@@ -3,7 +3,7 @@ from time import time
 import math
 from game import Game
 
-assets = {"Space Station": pg.image.load("assets/Space Station.png")}
+assets = {"Space Station": pg.transform.scale_by(pg.image.load("assets/Space Station.png"), 4), "Planet": pg.transform.scale_by(pg.image.load("assets/Planet.png"), 20)}
 
 
 class Ship:
@@ -14,15 +14,9 @@ class Ship:
     disabled = False
     disabled_time = 0.5
     time_since_disabled = 0
-    pressure_limit = 2_000
-    health = 200
-    max_health = health
-    selectedSlot = 0
-    totalHotBarSlots = 9  # 8 if indexing
     damage = 0
     speed = 10
     acceleration = 1
-    rotationSpeed = 5
 
     def __init__(self, x, y, name, correctionAngle: int):
         """correctionAngle -> should make it so that when the
@@ -62,13 +56,8 @@ class Ship:
             self.rect.centery - mouseY,
         )
 
-        angle = math.degrees(math.atan2(dy, dx)) - self.correctionAngle - 90
-        if angle > self.angle + self.rotationSpeed:
-            self.angle += self.rotationSpeed
-            self.reload()
-        elif angle < self.angle - self.rotationSpeed:
-            self.angle -= self.rotationSpeed
-            self.reload()
+        self.angle = math.degrees(math.atan2(dy, dx)) - self.correctionAngle - 90
+        self.reload()
 
         # getting inputs
         keys = pg.key.get_pressed()
@@ -98,13 +87,85 @@ class Ship:
             self.vel = min(self.vel, 0)
         self.vel = max(min(self.vel, self.speed), -self.speed)
 
+
+class CoreObject:
+    type = "Object"
+
+    def __init__(
+        self, x: int, y: int, name: str, scale: int | float = 1, angle: int = 0, size: tuple[int, int] | list[int, int] = None, data=None
+    ) -> None:
+        self.name = name
+        self.rect: pg.Rect = assets[name].get_rect(topleft=(x, y))
+        self.mask = pg.mask.from_surface(assets[name])
+        self.scale = scale
+        self.angle = angle
+        if size is None:
+            self.size = self.rect.width, self.rect.height
+        else:
+            self.size = size
+        self.size = [self.size[0], self.size[1]]
+        self.reload()
+        self.data = data
+
+    def resetSize(self) -> None:
+        self.size = [assets[self.name].get_width(), assets[self.name].get_height()]
+
+    def reload(self) -> None:
+        self.morphedImage = pg.transform.scale(assets[self.name], self.size)
+        self.scaledImage = pg.transform.scale_by(self.morphedImage, self.scale)
+        self.rotatedImage = pg.transform.rotate(self.scaledImage, self.angle)
+        self.mask = pg.mask.from_surface(self.rotatedImage)
+        self.rect = self.rotatedImage.get_rect(center=self.rect.center)
+
+    def rotate(self) -> None:
+        self.rotatedImage = pg.transform.rotate(self.scaledImage, self.angle)
+        self.mask = pg.mask.from_surface(self.rotatedImage)
+        self.rect = self.rotatedImage.get_rect(center=self.rect.center)
+
+    def script(self, *args): ...
+
+    def display(self, window: pg.Surface, x_offset: int = 0, y_offset: int = 0) -> None:
+        window.blit(self.rotatedImage, (self.rect.x - x_offset, self.rect.y - y_offset))
+
+    def pack(self):
+        self.morphedImage, self.scaledImage, self.rotatedImage, self.mask = None, None, None, None
+
+    def unpack(self):
+        self.reload()
+
+    def collide(self, *args): return []
+
+    def resolveXCollision(self, player, *args):
+        if pg.sprite.collide_mask(player, self): return True
+        return False
+
+    def resolveYCollision(self, player, *args):
+        if pg.sprite.collide_mask(player, self): return True
+        return False
+
 class SpaceEnvironment(Game):
-    ship = Ship(100, 100, "Space Station", 0)
+    def onInit(self):
+        self.ship = Ship(100, 100, "Space Station", 0)
+
+        self.x_offset, self.y_offset = 0, 0
+
+        self.spaceObjects = [CoreObject(100, 100, "Planet")]
 
     def display(self) -> None:
-        self.ship.display(self.window, 0, 0)
+        for obj in self.spaceObjects:
+            obj.display(self.window, self.x_offset, self.y_offset)
+
+        self.ship.display(self.window, self.x_offset, self.y_offset)
 
     def tick(self) -> None:
-        self.ship.script()
+        self.x_offset, self.y_offset = self.ship.rect.centerx - self.width/2, self.ship.rect.centery - self.height/2
+        self.ship.script(self.x_offset, self.y_offset)
 
-SpaceEnvironment((900, 500), "Space").start()
+        for obj in self.spaceObjects:
+            obj.angle += 1
+            obj.rotate()
+
+
+if __name__ == "__main__":
+    instance = SpaceEnvironment((900, 500), "Planet Miner (Space)", background=(0, 0, 0))
+    instance.start()
